@@ -1,0 +1,27 @@
+{
+  "name": "blip-chat",
+  "version": "1.0.0",
+  "description": "60-second anonymous-by-choice chats you join by scanning a QR code.",
+  "main": "server.js",
+  "directories": {
+    "test": "test"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "test": "node test/smoke.js && node test/ui.js",
+    "test:server": "node test/smoke.js",
+    "test:ui": "node test/ui.js"
+  },
+  "dependencies": {
+    "express": "^5.3.0",
+    "qrcode": "^1.5.4",
+    "ws": "^8.22.0"
+  },
+  "private": true,
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "jsdom": "^29.1.1"
+  }
+}

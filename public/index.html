@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Blip | 60-second chats you join with a QR code</title>
+<meta name="description" content="Make a QR code, share it, and chat for 60 seconds with whoever scans it. Stay anonymous if you like. Nothing is saved.">
+<meta name="theme-color" content="#eef0fb" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0a0c24" media="(prefers-color-scheme: dark)">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="preload" href="/fonts/bricolage-wdth.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+
+<svg class="sprite" width="0" height="0" aria-hidden="true" focusable="false">
+  <defs>
+    <symbol id="i-send" viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></symbol>
+    <symbol id="i-clip" viewBox="0 0 24 24"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></symbol>
+    <symbol id="i-mic" viewBox="0 0 24 24"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></symbol>
+    <symbol id="i-users" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></symbol>
+    <symbol id="i-share" viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></symbol>
+    <symbol id="i-print" viewBox="0 0 24 24"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></symbol>
+    <symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></symbol>
+    <symbol id="i-flag" viewBox="0 0 24 24"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></symbol>
+    <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></symbol>
+    <symbol id="i-qr" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><line x1="14" y1="14" x2="14" y2="14.01"/><line x1="18" y1="14" x2="21" y2="14"/><line x1="14" y1="18" x2="14" y2="21"/><line x1="18" y1="18" x2="21" y2="18"/><line x1="21" y1="18" x2="21" y2="21"/></symbol>
+    <symbol id="i-exit" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></symbol>
+    <symbol id="i-alert" viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></symbol>
+    <symbol id="i-eye-off" viewBox="0 0 24 24"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></symbol>
+  </defs>
+</svg>
+
+<main id="app">
+
+  <!-- Home -->
+  <section id="screen-home" class="screen home">
+    <header class="top">
+      <span class="wordmark">Blip</span>
+    </header>
+
+    <div class="hero">
+      <div class="clock" aria-hidden="true">
+        <span class="clock-num" id="homeNum">60</span>
+        <span class="clock-track"><span class="clock-fill" id="homeBar"></span></span>
+      </div>
+      <h1>Talk for 60 seconds.<br>Then it&rsquo;s gone.</h1>
+      <p class="lede">Make a QR code and share it. Whoever scans it joins your chat, as themselves or anonymously. Send text, photos, PDFs and voice notes. Nothing is saved.</p>
+      <div class="actions">
+        <button class="btn primary big" id="btnShare" type="button"><svg class="ico"><use href="#i-share"/></svg>Share QR code</button>
+        <button class="btn ghost big" id="btnPrint" type="button"><svg class="ico"><use href="#i-print"/></svg>Print QR code</button>
+      </div>
+    </div>
+
+    <ol class="steps">
+      <li><b>Tap Share or Print.</b> Blip makes a one-time QR code for your chat.</li>
+      <li><b>Someone scans it.</b> They pick a name or stay anonymous, then read the rules.</li>
+      <li><b>Your 60 seconds start when they join.</b> In the last 30 seconds, anyone can add 60 more.</li>
+    </ol>
+
+    <p class="notice"><svg class="ico"><use href="#i-alert"/></svg><span>Anyone with your QR code can join, and Blip can&rsquo;t check who they are. Don&rsquo;t share personal details. You must be 18 or older.</span></p>
+
+    <footer class="foot">
+      <span>Chats exist only in memory and disappear when the timer ends.</span>
+      <button class="link" type="button" data-act="rules">Rules and privacy</button>
+    </footer>
+  </section>
+
+  <!-- Gate: warning + identity -->
+  <section id="screen-gate" class="screen gate" hidden>
+    <button class="link back" id="gateBack" type="button">Back</button>
+    <h2 id="gateTitle">Before you start</h2>
+    <p class="lede" id="gateSub">Pick how you want to appear, then read the warnings.</p>
+
+    <fieldset class="identity">
+      <legend>How should others see you?</legend>
+      <label class="choice">
+        <input type="radio" name="idmode" value="anon" checked>
+        <span class="choice-body"><b>Stay anonymous</b><small>You get a random name, like &ldquo;Quiet Otter&rdquo;.</small></span>
+      </label>
+      <label class="choice">
+        <input type="radio" name="idmode" value="named">
+        <span class="choice-body"><b>Use a name</b><small>Everyone in the chat sees what you type.</small></span>
+      </label>
+      <div class="name-row" id="nameRow" hidden>
+        <label for="nameInput" class="sr">Your name</label>
+        <input id="nameInput" type="text" maxlength="24" autocomplete="off" autocapitalize="words" placeholder="First name or nickname">
+      </div>
+    </fieldset>
+
+    <div class="warn">
+      <h3><svg class="ico"><use href="#i-alert"/></svg>Read this first</h3>
+      <ul>
+        <li>Anyone with the QR code or link can join. You can&rsquo;t verify who anyone is, even if they use a name.</li>
+        <li>Anonymous doesn&rsquo;t mean untraceable. Others can screenshot or save anything you share.</li>
+        <li>Don&rsquo;t share personal, financial or location details.</li>
+        <li>Photos you send have location data removed. PDFs and voice notes are sent as they are.</li>
+        <li>Harassment, threats, scams, explicit content and anything illegal are not allowed. Use Report if you see it.</li>
+        <li>Blip is not for emergencies. Call your local emergency number.</li>
+      </ul>
+      <button class="link" type="button" data-act="rules">Read the full rules and privacy notice</button>
+    </div>
+
+    <label class="check"><input type="checkbox" id="ageOk"><span>I&rsquo;m 18 or older.</span></label>
+    <label class="check"><input type="checkbox" id="termsOk"><span>I&rsquo;ve read the warnings and I agree to the rules.</span></label>
+    <button class="btn primary big wide" id="gateGo" type="button" disabled>Continue</button>
+    <p class="field-error" id="gateError" role="alert" hidden></p>
+  </section>
+
+  <!-- Chat room -->
+  <section id="screen-room" class="room" hidden>
+    <header class="rbar">
+      <div class="rbar-row">
+        <div class="rbar-left">
+          <button class="icon-btn" type="button" data-act="invite" aria-label="Invite someone with the QR code"><svg class="ico"><use href="#i-qr"/></svg></button>
+          <button class="icon-btn people" id="peopleBtn" type="button" aria-label="People in this chat"><svg class="ico"><use href="#i-users"/></svg><span id="peopleCount">1</span></button>
+        </div>
+        <div class="timer" id="timer" role="timer" aria-label="Time left in this chat">
+          <span class="timer-num" id="timerNum">&ndash;</span>
+        </div>
+        <div class="rbar-right">
+          <button class="btn quiet small" id="leaveBtn" type="button"><svg class="ico"><use href="#i-exit"/></svg>Leave</button>
+        </div>
+      </div>
+      <div class="timer-track" aria-hidden="true"><div class="timer-fill" id="timerBar"></div></div>
+    </header>
+
+    <div class="banner" id="reconnect" hidden>Connection lost. Reconnecting&hellip;</div>
+
+    <div class="stage" id="stage">
+      <div class="waiting" id="waiting">
+        <div class="ticket">
+          <div class="ticket-top">
+            <p class="ticket-title">Waiting for someone to join</p>
+            <img id="qrImg" class="qr" alt="QR code that joins this chat" width="640" height="640">
+          </div>
+          <div class="ticket-tear" aria-hidden="true"></div>
+          <div class="ticket-bottom">
+            <p>Your 60 seconds start the moment the first person joins.</p>
+            <div class="actions">
+              <button class="btn primary" type="button" data-act="share"><svg class="ico"><use href="#i-share"/></svg>Share</button>
+              <button class="btn ghost" type="button" data-act="print"><svg class="ico"><use href="#i-print"/></svg>Print</button>
+              <button class="btn ghost" type="button" data-act="copy"><svg class="ico"><use href="#i-copy"/></svg>Copy link</button>
+            </div>
+            <p class="tiny" id="lobbyLeft"></p>
+          </div>
+        </div>
+      </div>
+
+      <ol class="log" id="log" aria-live="polite" aria-relevant="additions" hidden></ol>
+    </div>
+
+    <div class="extendbar" id="extendBar" hidden>
+      <span>Time&rsquo;s almost up.</span>
+      <button class="btn primary small" id="extendBtn" type="button">Add 60 seconds</button>
+    </div>
+
+    <form class="composer" id="composer" autocomplete="off">
+      <input type="file" id="fileInput" accept="image/*,application/pdf,.pdf" hidden>
+      <button class="icon-btn" id="attachBtn" type="button" aria-label="Attach a photo or PDF"><svg class="ico"><use href="#i-clip"/></svg></button>
+      <button class="icon-btn" id="micBtn" type="button" aria-label="Record a voice note"><svg class="ico"><use href="#i-mic"/></svg></button>
+      <textarea id="msgInput" rows="1" maxlength="1000" placeholder="Message" aria-label="Message"></textarea>
+      <button class="icon-btn send" id="sendBtn" type="submit" aria-label="Send message"><svg class="ico"><use href="#i-send"/></svg></button>
+    </form>
+
+    <div class="recbar" id="recbar" hidden>
+      <button class="icon-btn" id="recCancel" type="button" aria-label="Cancel recording"><svg class="ico"><use href="#i-x"/></svg></button>
+      <span class="rec-dot" aria-hidden="true"></span>
+      <span class="rec-time" id="recTime">0:00</span>
+      <span class="rec-hint">Recording</span>
+      <button class="btn primary small" id="recSend" type="button">Send</button>
+    </div>
+  </section>
+
+  <!-- Ended -->
+  <section id="screen-ended" class="screen ended" hidden>
+    <div class="clock" aria-hidden="true"><span class="clock-num">0</span></div>
+    <h2 id="endedTitle">Time&rsquo;s up.</h2>
+    <p class="lede" id="endedText">This chat and everything shared in it has been erased.</p>
+    <button class="btn primary big" id="newChat" type="button">Start a new chat</button>
+  </section>
+
+</main>
+
+<!-- Dialogs -->
+<dialog id="inviteDlg" class="dlg">
+  <div class="dlg-head"><h3>Invite someone</h3><button class="icon-btn" type="button" data-close aria-label="Close"><svg class="ico"><use href="#i-x"/></svg></button></div>
+  <div class="dlg-body center">
+    <img id="inviteQr" class="qr" alt="QR code that joins this chat" width="640" height="640">
+    <p class="tiny">New people see messages from the moment they join.</p>
+    <div class="actions">
+      <button class="btn primary" type="button" data-act="share"><svg class="ico"><use href="#i-share"/></svg>Share</button>
+      <button class="btn ghost" type="button" data-act="print"><svg class="ico"><use href="#i-print"/></svg>Print</button>
+      <button class="btn ghost" type="button" data-act="copy"><svg class="ico"><use href="#i-copy"/></svg>Copy link</button>
+    </div>
+  </div>
+</dialog>
+
+<dialog id="peopleDlg" class="dlg">
+  <div class="dlg-head"><h3>In this chat</h3><button class="icon-btn" type="button" data-close aria-label="Close"><svg class="ico"><use href="#i-x"/></svg></button></div>
+  <div class="dlg-body">
+    <ul class="people-list" id="peopleList"></ul>
+    <button class="btn ghost wide" type="button" id="reportChatBtn"><svg class="ico"><use href="#i-flag"/></svg>Report this chat</button>
+  </div>
+</dialog>
+
+<dialog id="reportDlg" class="dlg">
+  <div class="dlg-head"><h3 id="reportTitle">Report this chat</h3><button class="icon-btn" type="button" data-close aria-label="Close"><svg class="ico"><use href="#i-x"/></svg></button></div>
+  <div class="dlg-body">
+    <label for="reportReason" class="lbl">What&rsquo;s the problem?</label>
+    <select id="reportReason">
+      <option value="harassment">Harassment or threats</option>
+      <option value="explicit">Sexual or explicit content</option>
+      <option value="scam">Scam or spam</option>
+      <option value="child-safety">A child may be at risk</option>
+      <option value="other">Something else</option>
+    </select>
+    <p class="tiny">Sending a report shares the names in this chat and the last 20 text messages with the people who run Blip. Photos, PDFs and voice notes are not included. If a child is in danger, contact your local authorities as well.</p>
+    <label class="check"><input type="checkbox" id="reportOk"><span>I understand what will be sent.</span></label>
+    <button class="btn primary wide" type="button" id="reportSend" disabled>Send report</button>
+  </div>
+</dialog>
+
+<dialog id="rulesDlg" class="dlg tall">
+  <div class="dlg-head"><h3>Rules and privacy</h3><button class="icon-btn" type="button" data-close aria-label="Close"><svg class="ico"><use href="#i-x"/></svg></button></div>
+  <div class="dlg-body prose">
+    <h4>Who can use Blip</h4>
+    <p>You must be 18 or older. Blip isn&rsquo;t designed for children.</p>
+    <h4>What isn&rsquo;t allowed</h4>
+    <p>Harassment, threats, scams, spam, sexual or explicit content, anything involving the exploitation of minors, illegal content, and sharing other people&rsquo;s private information. The people who run Blip may block anyone who breaks these rules.</p>
+    <h4>What Blip keeps</h4>
+    <p>Messages, photos, PDFs and voice notes are held in the server&rsquo;s memory while the chat runs and erased when it ends, including if the server restarts. Blip has no accounts, ads or tracking cookies. Your network address is used briefly to limit abuse, and your browser keeps a small note for this tab so you can rejoin if your connection drops.</p>
+    <h4>If you report something</h4>
+    <p>A report sends the names in the chat, the reason you chose and the last 20 text messages to the people who run Blip. Files are never included.</p>
+    <h4>Know the limits</h4>
+    <p>Anonymous isn&rsquo;t untraceable, and other people can screenshot or save what you share. Photos have location data removed before they&rsquo;re sent, but PDFs and voice notes are shared as they are. Links in messages aren&rsquo;t clickable, and photos from others start hidden.</p>
+    <h4>Emergencies</h4>
+    <p>Blip is not for emergencies. Call your local emergency number. If you see child sexual abuse material, report it to the authorities in your country, such as the NCMEC CyberTipline in the US.</p>
+    <h4>No guarantees</h4>
+    <p>Blip is provided as is, without promises about uptime or about who you&rsquo;ll meet. You use it at your own risk.</p>
+  </div>
+</dialog>
+
+<dialog id="lightbox" class="dlg lightbox">
+  <button class="icon-btn close" type="button" data-close aria-label="Close picture"><svg class="ico"><use href="#i-x"/></svg></button>
+  <img id="lightImg" alt="Shared picture">
+</dialog>
+
+<div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+<!-- Printable QR poster (hidden on screen) -->
+<section id="print-sheet" aria-hidden="true">
+  <h1>Scan to chat for 60 seconds</h1>
+  <p class="p-sub">Stay anonymous if you like. Nothing is saved.</p>
+  <img id="printQr" alt="" width="640" height="640">
+  <p class="p-url" id="printUrl"></p>
+  <p class="p-small">Anyone with this code can join, and Blip can&rsquo;t check who they are. Don&rsquo;t share personal details. 18 and older only.<br>This code stops working when the chat ends or after 15 minutes without anyone joining.</p>
+</section>
+
+<script src="/app.js" defer></script>
+</body>
+</html>

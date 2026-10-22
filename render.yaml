@@ -1,0 +1,17 @@
+# One-click deploy on Render: New > Blueprint > pick this repo.
+# Use a paid (always-on) instance: free instances sleep, which would end live chats.
+services:
+  - type: web
+    name: blip-chat
+    runtime: node
+    plan: starter
+    buildCommand: npm ci --omit=dev
+    startCommand: node server.js
+    healthCheckPath: /healthz
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: NODE_ENV
+        value: production
+      - key: TRUST_PROXY
+        value: "1"
