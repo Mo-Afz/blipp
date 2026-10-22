@@ -8,13 +8,15 @@
   },
   "scripts": {
     "start": "node server.js",
-    "test": "node test/smoke.js && node test/ui.js",
+    "test": "node test/smoke.js && node test/posters.js && node test/ui.js",
     "test:server": "node test/smoke.js",
+    "test:posters": "node test/posters.js",
     "test:ui": "node test/ui.js"
   },
   "dependencies": {
     "express": "^5.3.0",
     "qrcode": "^1.5.4",
+    "stripe": "^23.0.0",
     "ws": "^8.22.0"
   },
   "private": true,

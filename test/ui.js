@@ -2,6 +2,7 @@
 // Drives the real client (public/app.js) in jsdom against the real server.
 // jsdom can't render CSS or use the microphone, so those need a real-browser check.
 const path = require('path');
+const fs = require('fs');
 const os = require('os');
 const { JSDOM } = require('jsdom');
 const { spawn } = require('child_process');
@@ -81,7 +82,19 @@ async function passGate(c, { named, prechecked } = {}) {
 
 async function main() {
   const server = spawn('node', [path.join(__dirname, '..', 'server.js')], {
-    env: { ...process.env, PORT: String(PORT), CHAT_SECONDS: '8', REPORT_DIR: path.join(os.tmpdir(), 'blip-ui-reports') },
+    env: {
+      ...process.env,
+      PORT: String(PORT),
+      CHAT_SECONDS: '8',
+      REPORT_DIR: path.join(os.tmpdir(), 'blip-ui-reports'),
+      DATA_DIR: fs.mkdtempSync(path.join(os.tmpdir(), 'blip-ui-data-')),
+      FOUNDER_LIMIT: '2',
+      FREE_SCANS: '3',
+      // Stripe is "on" but points at a closed port, so we can see the pack buttons and the failure message.
+      STRIPE_SECRET_KEY: 'sk_test_fake',
+      STRIPE_WEBHOOK_SECRET: 'whsec_fake',
+      STRIPE_API_HOST: 'http://127.0.0.1:9',
+    },
     stdio: 'ignore',
   });
   for (let i = 0; i < 60; i++) { try { if ((await fetch(`${BASE}/healthz`)).ok) break; } catch { /* wait */ } await sleep(100); }
@@ -224,8 +237,163 @@ async function main() {
     assert.ok(/ended/.test(D.$('#endedTitle').textContent));
   });
 
+  /* ------------------------------------------------ posters, scans, invites */
+
+  const pages = []; // every page opened below, checked for script errors at the end
+  const openP = async (p) => { const c = await open(p); pages.push(c); return c; };
+  const device = (c) => JSON.parse(c.w.localStorage.getItem('blip.device'));
+  const meApi = async (secret) => (await fetch(`${BASE}/api/me`, { headers: { Authorization: `Bearer ${secret}` } })).json();
+  let O; let posterId; let ownerSecret; let inviteCode;
+
+  await test('home shows how many founder spots are left', async () => {
+    const H = await openP('/');
+    await until(() => /2 of 2 free founder spots left/.test(H.$('#spotsLeft').textContent), 4000, 'spots text');
+  });
+
+  await test('My Blip makes a device on first visit and offers the founder spot', async () => {
+    O = await openP('/');
+    O.$('[data-act="posters"]').click();
+    await until(() => O.visible('#screen-me'), 3000, 'me screen');
+    assert.strictEqual(O.w.location.pathname, '/me');
+    await until(() => O.$('#meCredits').textContent === '0' && !O.$('#claimCard').hidden, 4000, 'claim card');
+    assert.ok(/first 2 people get 3 free scans/.test(O.$('#claimText').textContent), O.$('#claimText').textContent);
+    ownerSecret = device(O).secret;
+    assert.ok(ownerSecret);
+  });
+
+  await test('claiming gives the free scans and 2 invite links', async () => {
+    O.click('#claimBtn');
+    await until(() => O.$('#meCredits').textContent === '3', 4000, 'credits');
+    assert.ok(O.$('#claimCard').hidden);
+    assert.match(O.$('#meStarter').textContent, /Founder #1/);
+    assert.ok(!O.$('#inviteCard').hidden);
+    assert.ok(/make 2 more links/.test(O.$('#inviteText').textContent), O.$('#inviteText').textContent);
+  });
+
+  await test('making a poster lists it, and Print opens the print dialog with its QR', async () => {
+    O.$('#posterName').value = 'Coffee cart';
+    O.$('#posterForm').dispatchEvent(new O.w.Event('submit', { bubbles: true, cancelable: true }));
+    await until(() => O.w.document.querySelectorAll('#posterList li').length === 1, 3000, 'poster row');
+    assert.ok(/Coffee cart/.test(O.$('#posterList').textContent));
+    const printBtn = [...O.w.document.querySelectorAll('#posterList button')].find((b) => b.textContent === 'Print');
+    printBtn.click();
+    await until(() => O.w.__printed > 0, 4000, 'print called');
+    posterId = O.$('#printUrl').textContent.split('/p/')[1];
+    assert.match(posterId, /^[a-z0-9]{12}$/);
+    assert.ok(/Coffee cart/.test(O.$('#printTitle').textContent));
+    assert.ok(O.$('#printQr').getAttribute('src'));
+  });
+
+  let V; // the person who scans the poster
+  await test('scanning the poster shows the gate by name, then waits for the owner', async () => {
+    V = await openP(`/p/${posterId}`);
+    assert.ok(V.visible('#screen-gate'));
+    await until(() => /Chat with Coffee cart/.test(V.$('#gateTitle').textContent), 3000, 'poster title');
+    assert.strictEqual(V.$('#gateGo').textContent, 'Start chat');
+    // ticking the boxes must survive the poster details loading
+    V.check('#ageOk'); V.check('#termsOk');
+    await sleep(200);
+    assert.ok(V.$('#ageOk').checked && V.$('#termsOk').checked);
+    V.click('#gateGo');
+    await until(() => V.visible('#screen-room'), 4000, 'visitor room');
+    await until(() => V.visible('#waitingPoster'), 3000, 'poster waiting panel');
+    assert.ok(/Coffee cart/.test(V.$('#wpTitle').textContent), V.$('#wpTitle').textContent);
+    assert.ok(V.$('#inviteBtn').hidden, 'no invite-someone button in a one-to-one poster chat');
+    assert.strictEqual((await meApi(ownerSecret)).credits, 2, 'the scan used one credit');
+  });
+
+  await test('the owner sees the waiting scan in the inbox and joins it', async () => {
+    assert.ok(O.visible('#screen-me'));
+    await until(() => /Someone is waiting/.test(O.$('#inboxList').textContent), 6000, 'inbox row');
+    assert.ok(/Coffee cart/.test(O.$('#inboxList').textContent));
+    O.$('#inboxList button').click();
+    await until(() => O.visible('#screen-room'), 4000, 'owner room');
+    await until(() => /^0:0[4-8]$/.test(O.$('#timerNum').textContent.trim()), 5000, 'owner countdown');
+    await until(() => /^0:0[4-8]$/.test(V.$('#timerNum').textContent.trim()), 5000, 'visitor countdown');
+    assert.ok(O.$('#inviteBtn').hidden);
+  });
+
+  await test('the owner and the visitor can talk, and a live chat keeps the scan used', async () => {
+    O.$('#msgInput').value = 'Welcome to the cart';
+    O.$('#composer').dispatchEvent(new O.w.Event('submit', { bubbles: true, cancelable: true }));
+    await until(() => [...V.w.document.querySelectorAll('.msg')].some((m) => m.textContent.includes('Welcome to the cart')), 3000, 'visitor sees message');
+    assert.strictEqual((await meApi(ownerSecret)).credits, 2);
+  });
+
+  await test('when the visitor leaves, the owner is told and sent back to My Blip afterwards', async () => {
+    V.click('#leaveBtn');
+    await until(() => O.visible('#screen-ended'), 5000, 'owner ended');
+    assert.ok(/other person left/.test(O.$('#endedTitle').textContent), O.$('#endedTitle').textContent);
+    assert.ok(/My Blip/.test(O.$('#newChat').textContent), O.$('#newChat').textContent);
+  });
+
+  await test('a scan nobody joins is given back to the owner', async () => {
+    const W = await openP(`/p/${posterId}`);
+    await passGate(W);
+    await until(() => W.visible('#waitingPoster'), 4000, 'waiting');
+    assert.strictEqual((await meApi(ownerSecret)).credits, 1);
+    W.click('#leaveBtn');
+    await until(() => W.visible('#screen-ended'), 3000, 'visitor left');
+    let credits;
+    for (let i = 0; i < 30 && credits !== 2; i++) { credits = (await meApi(ownerSecret)).credits; if (credits !== 2) await sleep(100); }
+    assert.strictEqual(credits, 2, 'credit should come back');
+  });
+
+  await test('making an invite link shows it; a new person claims 3 scans with it, once', async () => {
+    O.click('#newChat'); // the owner's "Back to My Blip" button
+    await until(() => O.visible('#screen-me') && !O.$('#inviteMake').hidden, 4000, 'me screen again');
+    assert.strictEqual(O.w.location.pathname, '/me');
+    O.click('#inviteMake');
+    await until(() => O.w.document.querySelectorAll('#inviteList li').length === 1, 3000, 'invite row');
+    inviteCode = (await meApi(ownerSecret)).invites[0].code;
+    const I = await openP(`/i/${inviteCode}`);
+    await until(() => /A friend invited you/.test(I.$('#inviteTitle').textContent), 3000, 'invite title');
+    I.click('#inviteClaim');
+    await until(() => I.visible('#screen-me') && I.$('#meCredits').textContent === '3', 5000, 'invitee has scans');
+    assert.match(I.$('#meStarter').textContent, /Joined by invite/);
+    const J = await openP(`/i/${inviteCode}`);
+    await until(() => /already used/.test(J.$('#inviteTitle').textContent), 3000, 'used invite');
+    assert.ok(J.$('#inviteClaim').hidden);
+  });
+
+  await test('the last founder spot goes, then the next person sees they are gone', async () => {
+    const F = await openP('/me');
+    await until(() => !F.$('#claimCard').hidden && !F.$('#claimBtn').hidden, 4000, 'claim offered');
+    F.click('#claimBtn');
+    await until(() => /Founder #2/.test(F.$('#meStarter').textContent), 4000, 'founder 2');
+    const G = await openP('/me');
+    await until(() => !G.$('#claimCard').hidden, 4000, 'claim card');
+    assert.ok(/gone/.test(G.$('#claimTitle').textContent), G.$('#claimTitle').textContent);
+    assert.ok(G.$('#claimBtn').hidden);
+  });
+
+  await test('buying: packs are shown, and a payment hiccup gives a plain message', async () => {
+    assert.strictEqual(O.w.document.querySelectorAll('#packList .pack').length, 3);
+    O.$('#packList .pack').click();
+    await until(() => /Payments aren.t responding/.test(O.$('#toast').textContent), 20000, 'payment error toast');
+  });
+
+  await test('an out-of-scans poster tells the visitor, and nothing starts', async () => {
+    for (let i = 0; i < 2; i++) await fetch(`${BASE}/api/posters/${posterId}/scan`, { method: 'POST' });
+    assert.strictEqual((await meApi(ownerSecret)).credits, 0);
+    const X = await openP(`/p/${posterId}`);
+    await until(() => X.visible('#screen-ended'), 4000, 'ended screen');
+    assert.ok(/out of scans/.test(X.$('#endedTitle').textContent), X.$('#endedTitle').textContent);
+  });
+
+  await test('a recovery link restores an account on another device; a bad one explains', async () => {
+    const R = await openP(`/recover#${ownerSecret}`);
+    await until(() => R.visible('#screen-me'), 4000, 'recovered');
+    assert.strictEqual(device(R).secret, ownerSecret);
+    assert.ok(/Coffee cart/.test(R.$('#posterList').textContent));
+    assert.strictEqual(R.w.location.hash, '');
+    const R2 = await openP('/recover#nonsense');
+    await until(() => R2.visible('#screen-ended'), 4000, 'failed recovery');
+    assert.ok(/recovery link/.test(R2.$('#endedTitle').textContent));
+  });
+
   await test('no uncaught script errors on any page', async () => {
-    for (const c of [A, B]) assert.deepStrictEqual(c.errors, []);
+    for (const c of [A, B, ...pages]) assert.deepStrictEqual(c.errors, []);
   });
 
   console.log(`\n${passed}/${passed + failed} passed`);

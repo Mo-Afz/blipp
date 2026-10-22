@@ -15,10 +15,12 @@ const crypto = require('crypto');
 const express = require('express');
 const { WebSocketServer } = require('ws');
 const QRCode = require('qrcode');
+const { randomId, INVISIBLE, cleanName, num, int0 } = require('./lib/util');
+const { openStore } = require('./lib/store');
+const { parsePacks, createPayments } = require('./lib/payments');
+const { registerApi } = require('./lib/api');
 
 /* ------------------------------------------------------------------ config */
-
-const num = (v, d) => (Number.isFinite(Number(v)) && Number(v) > 0 ? Number(v) : d);
 
 const PORT = num(process.env.PORT, 3000);
 const CHAT_MS = num(process.env.CHAT_SECONDS, 60) * 1000; // base length + each extension
@@ -39,6 +41,23 @@ const PUBLIC_URL = (process.env.PUBLIC_URL || '').replace(/\/+$/, '');
 const TRUST_PROXY = process.env.TRUST_PROXY ? num(process.env.TRUST_PROXY, 1) : 0;
 const PUBLIC_DIR = path.join(__dirname, 'public');
 
+// Posters, scan credits, founder spots and invites.
+const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
+const cfg = {
+  FOUNDER_LIMIT: int0(process.env.FOUNDER_LIMIT, 100), // free spots for the first people to claim one
+  FREE_SCANS: int0(process.env.FREE_SCANS, 20), // scans in a free starter pack
+  FOUNDER_INVITES: int0(process.env.FOUNDER_INVITES, 2), // invite links each founder can hand out
+  INVITEE_INVITES: int0(process.env.INVITEE_INVITES, 0), // invite links each invited person gets
+  MAX_POSTERS: int0(process.env.MAX_POSTERS, 5),
+  MAX_PENDING: int0(process.env.MAX_PENDING, 5), // chats one poster can have waiting for its owner
+  POSTER_LOBBY_MS: num(process.env.POSTER_LOBBY_SECONDS, 180) * 1000, // how long a scanner waits for the owner
+  DEVICE_PER_HOUR: num(process.env.DEVICE_PER_HOUR, 8), // new accounts one network address can make per hour
+  CLAIMS_PER_HOUR: num(process.env.CLAIMS_PER_HOUR, 6), // free-spot and invite claims per address per hour
+  MAX_ROOMS,
+  PUBLIC_URL,
+  DURABLE: process.env.DATA_DURABLE === '1', // set to 1 only when DATA_DIR survives restarts
+};
+
 const REPORT_REASONS = new Set([
   'harassment',
   'explicit',
@@ -49,13 +68,6 @@ const REPORT_REASONS = new Set([
 
 /* --------------------------------------------------------------- utilities */
 
-const ID_ALPHABET = 'abcdefghjkmnpqrstvwxyz23456789'; // no look-alike characters
-function randomId(len) {
-  const bytes = crypto.randomBytes(len);
-  let out = '';
-  for (let i = 0; i < len; i++) out += ID_ALPHABET[bytes[i] % ID_ALPHABET.length];
-  return out;
-}
 const randomToken = () => crypto.randomBytes(18).toString('base64url');
 
 function makeLimiter(max, windowMs) {
@@ -95,19 +107,6 @@ function clientIp(req) {
     if (parts.length) return parts[Math.max(0, parts.length - TRUST_PROXY)];
   }
   return req.socket.remoteAddress || 'unknown';
-}
-
-// Zero-width, bidi-override and control characters are stripped from anything
-// a stranger types so they can't spoof names or hide text.
-const INVISIBLE = /[\u0000-\u0008\u000b-\u001f\u007f-\u009f​-‏‪-‮⁠-⁯﻿]/g;
-
-function cleanName(s) {
-  return String(s || '')
-    .normalize('NFKC')
-    .replace(INVISIBLE, '')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .slice(0, 24);
 }
 
 function cleanText(s) {
@@ -176,10 +175,16 @@ function safeFileName(raw, fallback) {
 const rooms = new Map();
 let storeBytes = 0;
 
-function createRoom() {
+/**
+ * opts (all optional) makes a "poster" room: a private chat between a poster's
+ * owner and one person who scanned it.
+ *   poster: { id, label }, ownerId, maxPeople, lobbyMs
+ */
+function createRoom(opts = {}) {
   let id;
   do id = randomId(12);
   while (rooms.has(id));
+  const lobbyMs = opts.lobbyMs || LOBBY_MS;
   const room = {
     id,
     createdAt: Date.now(),
@@ -194,26 +199,31 @@ function createRoom() {
     recent: [], // last text messages, kept only so a report can include them
     endTimer: null,
     lobbyTimer: null,
-    lobbyEndsAt: Date.now() + LOBBY_MS,
+    lobbyEndsAt: Date.now() + lobbyMs,
     reports: 0,
+    maxPeople: opts.maxPeople || MAX_PEOPLE,
+    poster: opts.poster || null,
+    ownerId: opts.ownerId || null,
+    refunded: false,
   };
   room.lobbyTimer = setTimeout(() => {
     if (room.status === 'waiting') endRoom(room, 'lobby');
-  }, LOBBY_MS);
+  }, lobbyMs);
   rooms.set(id, room);
   return room;
 }
 
 const PALETTE_SIZE = 8;
 
-function newPerson(room, name) {
-  const alias = name ? uniqueLabel(room, name) : randomAlias(room);
+function newPerson(room, name, host) {
+  const alias = host ? room.poster.label : name ? uniqueLabel(room, name) : randomAlias(room);
   return {
     id: randomId(8),
     token: randomToken(),
     alias,
-    anon: !name,
-    color: room.people.size % PALETTE_SIZE,
+    anon: host ? false : !name,
+    host: !!host,
+    color: host ? 0 : room.people.size % PALETTE_SIZE,
     ws: null,
     offlineTimer: null,
     rl: {},
@@ -221,7 +231,7 @@ function newPerson(room, name) {
   };
 }
 
-const pub = (p) => ({ id: p.id, alias: p.alias, anon: p.anon, color: p.color, online: !!p.ws });
+const pub = (p) => ({ id: p.id, alias: p.alias, anon: p.anon, host: !!p.host, color: p.color, online: !!p.ws });
 const publicPeople = (room) => [...room.people.values()].map(pub);
 const onlineCount = (room) => [...room.people.values()].filter((p) => p.ws).length;
 
@@ -235,6 +245,7 @@ function stateOf(room) {
     extensions: room.extensions,
     chatMs: CHAT_MS,
     extendWindowMs: EXTEND_WINDOW_MS,
+    poster: room.poster ? { label: room.poster.label } : null,
     now: Date.now(),
   };
 }
@@ -280,12 +291,19 @@ function removePerson(room, person, how) {
   }
   if (room.status === 'ended') return;
   if (room.people.size === 0) return endRoom(room, 'empty');
+  // A poster chat is one-to-one: when either side goes, it's over.
+  if (room.poster) return endRoom(room, 'peer_left');
   broadcast(room, { t: 'leave', id: person.id });
   sys(room, `${person.alias} left`);
 }
 
 function endRoom(room, reason) {
   if (room.status === 'ended') return;
+  // A poster scan that never became a live chat gives its credit back.
+  if (room.poster && !room.startedAt && !room.refunded) {
+    room.refunded = true;
+    api.refundScan(room);
+  }
   room.status = 'ended';
   clearTimeout(room.endTimer);
   clearTimeout(room.lobbyTimer);
@@ -366,7 +384,8 @@ app.get('/api/rooms/:id', (req, res) => {
     exists: true,
     status: room.status,
     people: room.people.size,
-    full: room.people.size >= MAX_PEOPLE,
+    full: room.people.size >= room.maxPeople,
+    poster: room.poster ? { label: room.poster.label } : null,
     chatSeconds: Math.round(CHAT_MS / 1000),
   });
 });
@@ -389,6 +408,36 @@ app.get('/qr/:id', async (req, res) => {
     res.status(500).end();
   }
 });
+
+// QR code for a poster. Posters last until their owner deletes them.
+app.get('/qr/p/:pid', async (req, res) => {
+  const poster = store.data.posters[req.params.pid];
+  if (!poster) return res.status(404).end();
+  const base = PUBLIC_URL || `${req.protocol}://${req.get('host')}`;
+  try {
+    const svg = await QRCode.toString(`${base}/p/${poster.id}`, {
+      type: 'svg',
+      margin: 2,
+      width: 640,
+      errorCorrectionLevel: 'M',
+      color: { dark: '#0b1033', light: '#ffffff' },
+    });
+    res.type('image/svg+xml').set('Cache-Control', 'no-store').send(svg);
+  } catch {
+    res.status(500).end();
+  }
+});
+
+// Accounts, founder spots, invites, posters, scan credits and payments.
+const store = openStore(DATA_DIR);
+const payments = createPayments({
+  secretKey: process.env.STRIPE_SECRET_KEY,
+  webhookSecret: process.env.STRIPE_WEBHOOK_SECRET,
+  packs: parsePacks(process.env.PACKS),
+  currency: String(process.env.CURRENCY || 'usd').toLowerCase(),
+  apiHost: process.env.STRIPE_API_HOST,
+});
+const api = registerApi(app, { store, payments, rooms, createRoom, makeLimiter, clientIp, config: cfg });
 
 // Upload one image, PDF or voice note into a live room as a raw request body.
 app.post('/api/rooms/:id/upload', (req, res) => {
@@ -496,13 +545,20 @@ app.get('/f/:room/:fid', (req, res) => {
 
 app.use(express.static(PUBLIC_DIR, { index: false, maxAge: process.env.NODE_ENV === 'production' ? '1h' : 0 }));
 
-app.get(['/', '/r/:id'], (req, res) => {
+app.get(['/', '/r/:id', '/p/:id', '/i/:code', '/me', '/recover'], (req, res) => {
   res.set('Cache-Control', 'no-cache');
-  if (req.path.startsWith('/r/')) res.set('X-Robots-Tag', 'noindex, nofollow');
+  if (req.path !== '/') res.set('X-Robots-Tag', 'noindex, nofollow');
   res.sendFile(path.join(PUBLIC_DIR, 'index.html'));
 });
 
 app.use((req, res) => res.status(404).type('text/plain').send('Not found'));
+
+// Bad JSON and the like: answer in the same shape as every other API error.
+// eslint-disable-next-line no-unused-vars
+app.use((err, req, res, next) => {
+  const status = Number(err && err.status) >= 400 && Number(err.status) < 500 ? err.status : 500;
+  res.status(status).json({ error: status === 500 ? 'server_error' : 'bad_request' });
+});
 
 const server = http.createServer(app);
 
@@ -544,6 +600,16 @@ function doJoin(ws, m) {
   let person = m.token ? room.byToken.get(String(m.token)) : null;
   let isNew = false;
 
+  // The owner of a poster proves it with their account secret and takes the host seat.
+  let isOwner = false;
+  if (!person && room.poster && m.owner) {
+    const acct = api.verifyCredential(String(m.owner));
+    if (acct && acct.id === room.ownerId) {
+      isOwner = true;
+      person = [...room.people.values()].find((p) => p.host) || null; // coming back on another tab
+    }
+  }
+
   if (person) {
     // Same person coming back after a dropped connection.
     clearTimeout(person.offlineTimer);
@@ -552,14 +618,16 @@ function doJoin(ws, m) {
     if (old && old !== ws) { try { old.close(4001, 'replaced'); } catch { /* noop */ } }
     broadcast(room, { t: 'presence', id: person.id, online: true }, person.id);
   } else {
-    if (room.people.size >= MAX_PEOPLE) {
+    const guests = [...room.people.values()].filter((p) => !p.host).length;
+    const full = room.people.size >= room.maxPeople || (room.poster && !isOwner && guests >= 1);
+    if (full) {
       send(ws, { t: 'error', code: 'full' });
       ws.close();
       return null;
     }
     const wantsName = m.anon === false;
     const name = wantsName ? cleanName(m.name) : '';
-    person = newPerson(room, name || '');
+    person = newPerson(room, name || '', isOwner);
     person.ws = ws;
     room.people.set(person.id, person);
     room.byToken.set(person.token, person);
@@ -691,6 +759,7 @@ setInterval(() => {
 
 function shutdown() {
   for (const room of [...rooms.values()]) endRoom(room, 'server');
+  store.flush();
   server.close(() => process.exit(0));
   setTimeout(() => process.exit(0), 1500).unref();
 }
@@ -698,7 +767,11 @@ process.on('SIGTERM', shutdown);
 process.on('SIGINT', shutdown);
 
 if (require.main === module) {
-  server.listen(PORT, () => console.log(`Blip is running on http://localhost:${PORT}`));
+  server.listen(PORT, () => {
+    console.log(`Blip is running on http://localhost:${PORT}`);
+    console.log(`Payments: ${payments.enabled ? 'on' : 'off (set STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET)'}`);
+    if (!cfg.DURABLE) console.log('Posters and scan balances reset if this server’s disk is wiped. Set DATA_DURABLE=1 once DATA_DIR is on a persistent disk.');
+  });
 }
 
 module.exports = { server };

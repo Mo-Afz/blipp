@@ -5,6 +5,9 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Blip | 60-second chats you join with a QR code</title>
 <meta name="description" content="Make a QR code, share it, and chat for 60 seconds with whoever scans it. Stay anonymous if you like. Nothing is saved.">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Blip: 60-second chats you join with a QR code">
+<meta property="og:description" content="Scan, chat for 60 seconds, stay anonymous if you like. Nothing is saved.">
 <meta name="theme-color" content="#eef0fb" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#0a0c24" media="(prefers-color-scheme: dark)">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
@@ -51,6 +54,12 @@
         <button class="btn primary big" id="btnShare" type="button"><svg class="ico"><use href="#i-share"/></svg>Share QR code</button>
         <button class="btn ghost big" id="btnPrint" type="button"><svg class="ico"><use href="#i-print"/></svg>Print QR code</button>
       </div>
+    </div>
+
+    <div class="teaser">
+      <p><b>Run a stall, shop or event?</b> Print one poster. Everyone who scans it gets their own private 60-second chat with you.</p>
+      <p class="teaser-spots" id="spotsLeft"></p>
+      <button class="btn quiet" type="button" data-act="posters">Make a poster QR</button>
     </div>
 
     <ol class="steps">
@@ -113,7 +122,7 @@
     <header class="rbar">
       <div class="rbar-row">
         <div class="rbar-left">
-          <button class="icon-btn" type="button" data-act="invite" aria-label="Invite someone with the QR code"><svg class="ico"><use href="#i-qr"/></svg></button>
+          <button class="icon-btn" id="inviteBtn" type="button" data-act="invite" aria-label="Invite someone with the QR code"><svg class="ico"><use href="#i-qr"/></svg></button>
           <button class="icon-btn people" id="peopleBtn" type="button" aria-label="People in this chat"><svg class="ico"><use href="#i-users"/></svg><span id="peopleCount">1</span></button>
         </div>
         <div class="timer" id="timer" role="timer" aria-label="Time left in this chat">
@@ -148,6 +157,16 @@
         </div>
       </div>
 
+      <div class="waiting" id="waitingPoster" hidden>
+        <div class="ticket">
+          <div class="ticket-top">
+            <p class="ticket-title" id="wpTitle">Waiting for the host</p>
+            <p class="lede small">We&rsquo;ve let them know. Your 60 seconds start when they join.</p>
+            <p class="tiny" id="wpLeft"></p>
+          </div>
+        </div>
+      </div>
+
       <ol class="log" id="log" aria-live="polite" aria-relevant="additions" hidden></ol>
     </div>
 
@@ -171,6 +190,76 @@
       <span class="rec-hint">Recording</span>
       <button class="btn primary small" id="recSend" type="button">Send</button>
     </div>
+  </section>
+
+  <!-- My Blip: posters, scans, invites -->
+  <section id="screen-me" class="screen me" hidden>
+    <header class="top">
+      <button class="link back" id="meBack" type="button">Back</button>
+      <span class="wordmark">Blip</span>
+    </header>
+    <h2>My Blip</h2>
+    <p class="lede">Print a poster QR. Each scan opens its own private chat with you and uses one scan.</p>
+
+    <p class="panel soft" id="meNotice" hidden></p>
+    <p class="panel soft" id="meDurable" hidden>Early access: Blip is running on a test server that can reset. If it does, posters and scans are cleared.</p>
+
+    <div class="panel balance">
+      <div><span class="bal-num" id="meCredits">0</span><span class="bal-unit">scans left</span></div>
+      <p id="meStarter" class="tiny"></p>
+    </div>
+
+    <div class="panel" id="claimCard" hidden>
+      <h3 id="claimTitle">Claim your free scans</h3>
+      <p id="claimText"></p>
+      <button class="btn primary" id="claimBtn" type="button">Claim free scans</button>
+    </div>
+
+    <div class="panel" id="postersCard">
+      <h3>Your posters</h3>
+      <p class="tiny" id="postersNote"></p>
+      <ul class="rows" id="posterList"></ul>
+      <form class="inline-form" id="posterForm" autocomplete="off">
+        <label for="posterName" class="sr">Name on your poster</label>
+        <input id="posterName" type="text" maxlength="24" placeholder="Name on your poster, like Cafe Luna">
+        <button class="btn primary" type="submit">Make poster</button>
+      </form>
+    </div>
+
+    <div class="panel" id="inboxCard">
+      <h3>Chats waiting for you</h3>
+      <p class="tiny">Keep this page open to see new scans. A scanner waits up to 3 minutes for you to join.</p>
+      <ul class="rows" id="inboxList"></ul>
+    </div>
+
+    <div class="panel" id="inviteCard">
+      <h3>Invite friends</h3>
+      <p id="inviteText"></p>
+      <ul class="rows" id="inviteList"></ul>
+      <button class="btn ghost" id="inviteMake" type="button">Make an invite link</button>
+    </div>
+
+    <div class="panel" id="buyCard">
+      <h3>Get more scans</h3>
+      <div class="packs" id="packList"></div>
+      <p class="tiny" id="buyNote"></p>
+    </div>
+
+    <div class="panel" id="recoverCard">
+      <h3>Keep your scans safe</h3>
+      <p>Blip has no email or password. This link is the only way back in if you clear your browser or switch phones. Anyone who has it can use your scans, so keep it private.</p>
+      <button class="btn ghost" id="recoverCopy" type="button"><svg class="ico"><use href="#i-copy"/></svg>Copy recovery link</button>
+    </div>
+  </section>
+
+  <!-- Invite landing -->
+  <section id="screen-invite" class="screen invite" hidden>
+    <div class="clock" aria-hidden="true"><span class="clock-num" id="inviteNum">20</span></div>
+    <h2 id="inviteTitle">A friend invited you</h2>
+    <p class="lede" id="inviteBody">Claim free scans for your own poster QR. Each scan starts a private 60-second chat with you.</p>
+    <button class="btn primary big" id="inviteClaim" type="button">Claim free scans</button>
+    <button class="link" id="inviteHome" type="button" hidden>Go to Blip</button>
+    <p class="field-error" id="inviteErr" role="alert" hidden></p>
   </section>
 
   <!-- Ended -->
@@ -251,11 +340,11 @@
 
 <!-- Printable QR poster (hidden on screen) -->
 <section id="print-sheet" aria-hidden="true">
-  <h1>Scan to chat for 60 seconds</h1>
-  <p class="p-sub">Stay anonymous if you like. Nothing is saved.</p>
+  <h1 id="printTitle">Scan to chat for 60 seconds</h1>
+  <p class="p-sub" id="printSub">Stay anonymous if you like. Nothing is saved.</p>
   <img id="printQr" alt="" width="640" height="640">
   <p class="p-url" id="printUrl"></p>
-  <p class="p-small">Anyone with this code can join, and Blip can&rsquo;t check who they are. Don&rsquo;t share personal details. 18 and older only.<br>This code stops working when the chat ends or after 15 minutes without anyone joining.</p>
+  <p class="p-small" id="printSmall">Anyone with this code can join, and Blip can&rsquo;t check who they are. Don&rsquo;t share personal details. 18 and older only.<br>This code stops working when the chat ends or after 15 minutes without anyone joining.</p>
 </section>
 
 <script src="/app.js" defer></script>
