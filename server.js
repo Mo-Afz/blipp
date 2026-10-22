@@ -332,6 +332,21 @@ const app = express();
 app.disable('x-powered-by');
 if (TRUST_PROXY) app.set('trust proxy', TRUST_PROXY);
 
+// Rate limits depend on seeing each visitor's real address, which depends on TRUST_PROXY
+// matching the number of proxies in front of the app. This logs (counts only, never
+// addresses) what the first few requests looked like, so the setting can be checked in the host's logs.
+let proxyProbes = TRUST_PROXY ? 6 : 0;
+app.use((req, res, next) => {
+  if (proxyProbes > 0) {
+    const hops = String(req.headers['x-forwarded-for'] || '').split(',').filter((s) => s.trim()).length;
+    if (hops > 0) {
+      proxyProbes -= 1;
+      console.log(`proxy check: this request carried ${hops} forwarded address(es); Blip trusts the last ${TRUST_PROXY}`);
+    }
+  }
+  next();
+});
+
 const CSP = [
   "default-src 'self'",
   "script-src 'self'",
